@@ -99,9 +99,36 @@ class InputHandler {
 
     handleEnter() {
         const message = this.currentInput.trim();
-        
+
         this.display.clearInputBox();
-        
+
+        if (this.display.incognito) {
+            if (message === 'exit') {
+                this.cleanup();
+                process.exit(0);
+                return;
+            }
+            if (message === 'pwd') {
+                const code = this.chatClient.roomCode || 'unknown';
+                console.log(`/rooms/${code}`);
+                this.resetInput();
+                this.display.redrawInputBox(this.currentInput, this.cursorPosition);
+                return;
+            }
+            if (message === 'man') {
+                console.log('usage: <text to send> | pwd | man | exit');
+                this.resetInput();
+                this.display.redrawInputBox(this.currentInput, this.cursorPosition);
+                return;
+            }
+            if (message !== '') {
+                this.chatClient.sendMessage(message);
+            }
+            this.resetInput();
+            this.display.redrawInputBox(this.currentInput, this.cursorPosition);
+            return;
+        }
+
         if (message === '/quit') {
             console.log(chalk.yellow('👋 Leaving the room...'));
             this.cleanup();
@@ -171,9 +198,10 @@ class InputHandler {
         this.currentInput = this.currentInput.slice(0, this.cursorPosition) + char + this.currentInput.slice(this.cursorPosition);
         this.cursorPosition++;
         this.display.redrawInputBox(this.currentInput, this.cursorPosition);
-        
-        // Update emoji suggestions if needed
-        this.updateEmojiSuggestions();
+
+        if (!this.display.incognito) {
+            this.updateEmojiSuggestions();
+        }
     }
 
 

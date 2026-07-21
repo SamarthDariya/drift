@@ -6,6 +6,41 @@ class Display {
         this.suggestionsActive = false;
         this.suggestionLines = 0;
         this.redrawCallback = null;
+        this.incognito = false;
+    }
+
+    moduleFor(nickname) {
+        const pool = ['auth.session', 'cache.redis', 'http.worker', 'queue.consumer', 'db.pool', 'net.gateway'];
+        let hash = 0;
+        for (let i = 0; i < nickname.length; i++) hash += nickname.charCodeAt(i);
+        return pool[hash % pool.length];
+    }
+
+    levelFor(nickname) {
+        let hash = 0;
+        for (let i = 0; i < nickname.length; i++) hash += nickname.charCodeAt(i) * (i + 1);
+        return (hash % 4 === 0) ? 'DEBUG' : 'INFO';
+    }
+
+    logLine(level, module, text) {
+        const now = new Date();
+        const ts = now.getFullYear() + '-' +
+            String(now.getMonth() + 1).padStart(2, '0') + '-' +
+            String(now.getDate()).padStart(2, '0') + ' ' +
+            String(now.getHours()).padStart(2, '0') + ':' +
+            String(now.getMinutes()).padStart(2, '0') + ':' +
+            String(now.getSeconds()).padStart(2, '0') + '.' +
+            String(now.getMilliseconds()).padStart(3, '0');
+        const lvl = level.padEnd(5);
+        return `${ts} [${lvl}] ${module}  ${text}`;
+    }
+
+    boot(text) {
+        return this.logLine('INFO', 'boot', text);
+    }
+
+    sysLog(level, text) {
+        return this.logLine(level, 'net.pool', text);
     }
 
     displayBanner() {
@@ -45,12 +80,21 @@ class Display {
     }
 
     displayMessage(message, currentNickname) {
+        if (this.incognito) {
+            const wasInputActive = this.inputBoxActive;
+            if (this.inputBoxActive) this.clearInputBox();
+            const mod = this.moduleFor(message.nickname);
+            const level = this.levelFor(message.nickname);
+            console.log(this.logLine(level, mod, message.message));
+            if (wasInputActive && this.redrawCallback) this.redrawCallback();
+            return;
+        }
+
         const time = new Date(message.timestamp).toLocaleTimeString();
         const isOwnMessage = message.nickname === currentNickname;
 
-        // Clear input and suggestions if active
         const wasInputActive = this.inputBoxActive;
-        
+
         if (this.inputBoxActive) {
             this.clearInputBox();
         }
@@ -64,16 +108,26 @@ class Display {
             console.log(chalk.gray(`[${time}] `) + chalk.green.bold(`${message.nickname}: `) + message.message);
         }
 
-        // Restore input if it was active and we have a redraw callback
         if (wasInputActive && this.redrawCallback) {
             this.redrawCallback();
         }
     }
 
     displaySystemMessage(text) {
-        // Clear input and suggestions if active
+        if (this.incognito) {
+            const wasInputActive = this.inputBoxActive;
+            if (this.inputBoxActive) this.clearInputBox();
+            if (this.suggestionsActive) this.clearEmojiSuggestions();
+            let logText = text;
+            if (text.includes('joined the room')) logText = 'peer connected';
+            else if (text.includes('left the room')) logText = 'peer disconnected';
+            console.log(this.sysLog('INFO', logText));
+            if (wasInputActive && this.redrawCallback) this.redrawCallback();
+            return;
+        }
+
         const wasInputActive = this.inputBoxActive;
-        
+
         if (this.inputBoxActive) {
             this.clearInputBox();
         }
@@ -83,7 +137,6 @@ class Display {
 
         console.log(chalk.yellow(`🔔 ${text}`));
 
-        // Restore input if it was active and we have a redraw callback
         if (wasInputActive && this.redrawCallback) {
             this.redrawCallback();
         }
@@ -152,7 +205,7 @@ class Display {
         // Clear the line and redraw
         this.clearInputBox();
 
-        const prompt = chalk.blue('> ');
+        const prompt = this.incognito ? '$ ' : chalk.blue('> ');
         const displayText = currentInput;
 
         process.stdout.write(prompt + displayText);

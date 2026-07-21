@@ -29,7 +29,11 @@ class ChatClient {
 
             this.ws.on('close', () => {
                 if (this.isConnected) {
-                    console.log(chalk.red('\n💔 Connection lost. Exiting...'));
+                    if (this.display.incognito) {
+                        console.log(this.display.logLine('WARN', 'net.gateway', 'connection reset'));
+                    } else {
+                        console.log(chalk.red('\n💔 Connection lost. Exiting...'));
+                    }
                     process.exit(0);
                 }
             });
@@ -67,11 +71,13 @@ class ChatClient {
         switch (message.type) {
             case 'room_created':
                 this.roomCode = message.roomCode;
-                console.log(chalk.green.bold(`\n✅ Room created successfully!`));
-                console.log(chalk.cyan(`📋 Room Code: ${message.roomCode}`));
-                console.log(chalk.gray('Share this code with others to invite them.\n'));
-                
-                // Auto-join the created room
+                if (this.display.incognito) {
+                    console.log(this.display.boot(`room=${message.roomCode} listening`));
+                } else {
+                    console.log(chalk.green.bold(`\n✅ Room created successfully!`));
+                    console.log(chalk.cyan(`📋 Room Code: ${message.roomCode}`));
+                    console.log(chalk.gray('Share this code with others to invite them.\n'));
+                }
                 this.ws.send(JSON.stringify({
                     type: 'join_room',
                     roomCode: message.roomCode,
@@ -81,18 +87,24 @@ class ChatClient {
 
             case 'joined_room':
                 this.roomCode = message.roomCode;
-                console.log(chalk.green.bold(`\n🎉 Joined room ${message.roomCode}!`));
-                
-                // Display previous messages
-                if (message.messages && message.messages.length > 0) {
-                    console.log(chalk.gray('\n--- Previous Messages ---'));
-                    message.messages.forEach(msg => {
-                        this.display.displayMessage(msg, this.nickname);
-                    });
-                    console.log(chalk.gray('--- End of Previous Messages ---\n'));
+                if (this.display.incognito) {
+                    if (message.messages && message.messages.length > 0) {
+                        message.messages.forEach(msg => {
+                            this.display.displayMessage(msg, this.nickname);
+                        });
+                    }
+                    console.log(this.display.boot('session established'));
+                } else {
+                    console.log(chalk.green.bold(`\n🎉 Joined room ${message.roomCode}!`));
+                    if (message.messages && message.messages.length > 0) {
+                        console.log(chalk.gray('\n--- Previous Messages ---'));
+                        message.messages.forEach(msg => {
+                            this.display.displayMessage(msg, this.nickname);
+                        });
+                        console.log(chalk.gray('--- End of Previous Messages ---\n'));
+                    }
                 }
-                
-                return 'joined_room'; // Signal to start chat interface
+                return 'joined_room';
                 break;
 
             case 'message':
@@ -110,9 +122,13 @@ class ChatClient {
                 break;
 
             case 'error':
-                console.error(chalk.red(`❌ Error: ${message.message}`));
+                if (this.display.incognito) {
+                    console.log(this.display.logLine('ERROR', 'net.gateway', message.message));
+                } else {
+                    console.error(chalk.red(`❌ Error: ${message.message}`));
+                }
                 setTimeout(() => {
-                    return 'error'; // Signal to return to main menu
+                    return 'error';
                 }, 1000);
                 break;
         }

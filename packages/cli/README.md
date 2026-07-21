@@ -46,9 +46,33 @@ drift
 
 4. **Start chatting**!
 
+## 🕶️ Incognito Mode
+
+Disguises the chat as terminal log output — ideal when you don't want shoulder-surfers reading your screen.
+
+```bash
+drift --incognito
+# or
+drift -ic
+```
+
+**Entry flow:**
+- `host:` — room code to join (leave blank to create a new room)
+- `user:` — your nickname
+
+**In-chat commands (incognito):**
+
+| Command | Action |
+|---------|--------|
+| `exit` | Leave the room |
+| `pwd` | Show room code as `/rooms/ABC123` |
+| `man` | Show usage help |
+
+Messages render as fake timestamped log lines. Games, emoji suggestions, and slash commands are disabled.
+
 ## 💬 Chat Commands
 
-While in a chat room, you can use these commands:
+While in a chat room (normal mode), you can use these commands:
 
 - `/quit` - Leave the current room
 - `/room` - Show the current room code
