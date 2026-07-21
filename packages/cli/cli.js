@@ -13,10 +13,12 @@ const Emoji = require('./modules/emoji');
 const VersionChecker = require('./modules/version-checker');
 const SnakeClient = require('./modules/snake-client');
 
+const incognitoMode = process.argv.includes('--incognito') || process.argv.includes('-ic');
+
 class ChatCLI {
     constructor() {
-        // Initialize modules
         this.display = new Display();
+        if (incognitoMode) this.display.incognito = true;
         this.games = new Games();
         this.emoji = new Emoji();
         this.chatClient = new ChatClient(this.display);
@@ -28,15 +30,50 @@ class ChatCLI {
     }
 
     async start() {
+        if (this.display.incognito) {
+            await this.incognitoStart();
+            return;
+        }
         this.display.displayBanner();
-        
-        // Check for updates (non-blocking)
+
         await this.versionChecker.checkForUpdates();
 
         try {
             await this.showMainMenu();
         } catch (error) {
             console.error(chalk.red('Error:', error.message));
+            process.exit(1);
+        }
+    }
+
+    async incognitoStart() {
+        const { host } = await inquirer.prompt([{
+            type: 'input',
+            name: 'host',
+            message: 'host:',
+            default: ''
+        }]);
+
+        const { user } = await inquirer.prompt([{
+            type: 'input',
+            name: 'user',
+            message: 'user:',
+            validate: v => v.trim() ? true : 'required'
+        }]);
+
+        this.chatClient.nickname = user.trim();
+        console.log('connecting...');
+
+        try {
+            await this.chatClient.connectToServer();
+            if (host.trim()) {
+                this.chatClient.joinRoom(host.trim(), user.trim());
+            } else {
+                this.chatClient.createRoom();
+            }
+            this.waitForRoomJoin();
+        } catch (error) {
+            console.log(this.display.logLine('ERROR', 'net.gateway', error.message));
             process.exit(1);
         }
     }
@@ -199,7 +236,7 @@ class ChatCLI {
 
     startChatInterface() {
         this.inChatMode = true;
-        this.display.showChatIntro();
+        if (!this.display.incognito) this.display.showChatIntro();
         this.inputHandler.setupInputBox();
     }
 
