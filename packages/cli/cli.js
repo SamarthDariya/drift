@@ -246,6 +246,11 @@ class ChatCLI {
         if (this.display.incognito) {
             process.stdout.write('\x1Bc');
             this.display.drawHeader();
+            // The screen clear above wipes the room-code line printed on
+            // room_created, so re-emit it as a boot line that persists.
+            if (this.chatClient.roomCode) {
+                console.log(this.display.boot(`room=${this.chatClient.roomCode} listening`));
+            }
         }
         this.inputHandler.setupInputBox();
         if (this.display.incognito) this.display.startSeeder();
