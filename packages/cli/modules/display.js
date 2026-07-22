@@ -7,40 +7,63 @@ class Display {
         this.suggestionLines = 0;
         this.redrawCallback = null;
         this.incognito = false;
+        this.incognitoMode = null;
+        this.hideMessages = false;
+        this.seederActive = false;
+        this._timeline = [];
+        this._seedTimer = null;
     }
 
-    moduleFor(nickname) {
-        const pool = ['auth.session', 'cache.redis', 'http.worker', 'queue.consumer', 'db.pool', 'net.gateway'];
-        let hash = 0;
-        for (let i = 0; i < nickname.length; i++) hash += nickname.charCodeAt(i);
-        return pool[hash % pool.length];
+    _pushTimeline(kind, line) {
+        this._timeline.push({ kind, line });
+        if (this._timeline.length > 200) this._timeline.shift();
     }
 
-    levelFor(nickname) {
-        let hash = 0;
-        for (let i = 0; i < nickname.length; i++) hash += nickname.charCodeAt(i) * (i + 1);
-        return (hash % 4 === 0) ? 'DEBUG' : 'INFO';
-    }
-
-    logLine(level, module, text) {
-        const now = new Date();
-        const ts = now.getFullYear() + '-' +
-            String(now.getMonth() + 1).padStart(2, '0') + '-' +
-            String(now.getDate()).padStart(2, '0') + ' ' +
-            String(now.getHours()).padStart(2, '0') + ':' +
-            String(now.getMinutes()).padStart(2, '0') + ':' +
-            String(now.getSeconds()).padStart(2, '0') + '.' +
-            String(now.getMilliseconds()).padStart(3, '0');
-        const lvl = level.padEnd(5);
-        return `${ts} [${lvl}] ${module}  ${text}`;
+    toggleHide() {
+        this.hideMessages = !this.hideMessages;
+        process.stdout.write('\x1Bc');
+        const filter = this.hideMessages ? e => e.kind === 'seed' : () => true;
+        this._timeline.filter(filter).forEach(e => console.log(e.line));
+        if (this.redrawCallback) this.redrawCallback();
     }
 
     boot(text) {
-        return this.logLine('INFO', 'boot', text);
+        if (this.incognitoMode) return this.incognitoMode.formatBoot(text);
+        return text;
     }
 
-    sysLog(level, text) {
-        return this.logLine(level, 'net.pool', text);
+    logLine(level, mod, text) {
+        if (this.incognitoMode) return this.incognitoMode.formatError(text);
+        return text;
+    }
+
+    startSeeder() {
+        this.seederActive = true;
+        this._scheduleSeed();
+    }
+
+    stopSeeder() {
+        this.seederActive = false;
+        if (this._seedTimer) clearTimeout(this._seedTimer);
+    }
+
+    _scheduleSeed() {
+        if (!this.seederActive) return;
+        const delay = 1500 + Math.random() * 5000;
+        this._seedTimer = setTimeout(() => this._seedTick(), delay);
+    }
+
+    _seedTick() {
+        if (!this.seederActive || !this.incognitoMode) return;
+        const wasInputActive = this.inputBoxActive;
+        if (this.inputBoxActive) this.clearInputBox();
+
+        const line = this.incognitoMode.seedLine();
+        this._pushTimeline('seed', line);
+        console.log(line);
+
+        if (wasInputActive && this.redrawCallback) this.redrawCallback();
+        this._scheduleSeed();
     }
 
     displayBanner() {
@@ -62,7 +85,6 @@ class Display {
         console.log(chalk.gray('Commands: "/room" for room code'));
         console.log(chalk.gray('Commands: "/help" for help'));
 
-
         console.log(
             chalk.yellow.bold('\n✨ ~~~ ') +
             chalk.cyanBright.underline.bold(' P A S T I M E ') +
@@ -72,7 +94,7 @@ class Display {
         console.log(chalk.gray('👉 ') + chalk.greenBright('/trivia') + chalk.white(' → Random trivias 🧠'));
         console.log(chalk.gray('👉 ') + chalk.blueBright('/fortune') + chalk.white(' → Quirky quotes 🍀'));
         console.log(chalk.gray('👉 ') + chalk.magentaBright('/art') + chalk.white(' → Fun ASCII art 🎨'));
-        
+
         console.log(chalk.gray('\nOther Features:'));
         console.log(chalk.gray('👉 ') + chalk.yellowBright('/emojis') + chalk.white(' → Show emoji shortcuts 😊'));
         console.log(chalk.gray('👉 ') + chalk.gray('Type ":" for emoji suggestions (↑↓ to navigate, Tab to select)'));
@@ -80,12 +102,13 @@ class Display {
     }
 
     displayMessage(message, currentNickname) {
-        if (this.incognito) {
+        if (this.incognito && this.incognitoMode) {
+            const line = this.incognitoMode.formatMessage(message.nickname, message.message, message.timestamp);
+            this._pushTimeline('real', line);
+            if (this.hideMessages) return;
             const wasInputActive = this.inputBoxActive;
             if (this.inputBoxActive) this.clearInputBox();
-            const mod = this.moduleFor(message.nickname);
-            const level = this.levelFor(message.nickname);
-            console.log(this.logLine(level, mod, message.message));
+            console.log(line);
             if (wasInputActive && this.redrawCallback) this.redrawCallback();
             return;
         }
@@ -114,14 +137,14 @@ class Display {
     }
 
     displaySystemMessage(text) {
-        if (this.incognito) {
+        if (this.incognito && this.incognitoMode) {
+            const line = this.incognitoMode.formatSystem(text);
+            this._pushTimeline('real', line);
+            if (this.hideMessages) return;
             const wasInputActive = this.inputBoxActive;
             if (this.inputBoxActive) this.clearInputBox();
             if (this.suggestionsActive) this.clearEmojiSuggestions();
-            let logText = text;
-            if (text.includes('joined the room')) logText = 'peer connected';
-            else if (text.includes('left the room')) logText = 'peer disconnected';
-            console.log(this.sysLog('INFO', logText));
+            console.log(line);
             if (wasInputActive && this.redrawCallback) this.redrawCallback();
             return;
         }
@@ -143,9 +166,8 @@ class Display {
     }
 
     showHelpMessage(gameCommands) {
-        // Clear input and suggestions if active
         const wasInputActive = this.inputBoxActive;
-        
+
         if (this.inputBoxActive) {
             this.clearInputBox();
         }
@@ -160,17 +182,15 @@ class Display {
         console.log(chalk.gray('  /help      - Show this help'));
         console.log(chalk.gray('  /room      - Show room code'));
         console.log(chalk.gray('  /quit      - Leave the room'));
-        
-        // Restore input if it was active and we have a redraw callback
+
         if (wasInputActive && this.redrawCallback) {
             this.redrawCallback();
         }
     }
 
     showGameContent(gameData) {
-        // Clear input and suggestions if active
         const wasInputActive = this.inputBoxActive;
-        
+
         if (this.inputBoxActive) {
             this.clearInputBox();
         }
@@ -182,8 +202,7 @@ class Display {
         gameData.content.forEach(line => {
             console.log(line);
         });
-        
-        // Restore input if it was active and we have a redraw callback
+
         if (wasInputActive && this.redrawCallback) {
             this.redrawCallback();
         }
@@ -191,10 +210,8 @@ class Display {
 
     clearInputBox() {
         if (!this.inputBoxActive) return;
-
-        // Move to input line and clear it
-        process.stdout.write('\u001b[2K'); // Clear entire line
-        process.stdout.write('\u001b[1G'); // Move to beginning of line
+        process.stdout.write('[2K');
+        process.stdout.write('[1G');
     }
 
     redrawInputBox(currentInput, cursorPosition) {
@@ -202,21 +219,18 @@ class Display {
             this.inputBoxActive = true;
         }
 
-        // Clear the line and redraw
         this.clearInputBox();
 
-        const prompt = this.incognito ? '$ ' : chalk.blue('> ');
+        const prompt = (this.incognito && this.incognitoMode) ? this.incognitoMode.prompt : chalk.blue('> ');
         const displayText = currentInput;
 
         process.stdout.write(prompt + displayText);
 
-        // Position cursor correctly
-        const totalPromptLength = 2; // '> ' length without ANSI codes
+        const totalPromptLength = 2;
         const targetPosition = totalPromptLength + cursorPosition;
 
-        // Move cursor to correct position
-        process.stdout.write('\u001b[1G'); // Go to start of line
-        process.stdout.write(`\u001b[${targetPosition + 1}G`); // Move to target position
+        process.stdout.write('[1G');
+        process.stdout.write(`[${targetPosition + 1}G`);
     }
 
     setInputBoxActive(active) {
@@ -233,10 +247,8 @@ class Display {
             return;
         }
 
-        // Clear previous suggestions first
         this.clearEmojiSuggestions();
 
-        // Move cursor to next line for suggestions
         process.stdout.write('\n');
 
         suggestions.forEach((suggestion, index) => {
@@ -245,15 +257,14 @@ class Display {
             const emoji = chalk.yellow(suggestion.emoji);
             const shortcut = chalk.gray(suggestion.shortcut);
             const description = chalk.dim(suggestion.description);
-            
+
             process.stdout.write(prefix + emoji + ' ' + shortcut + ' ' + description + '\n');
         });
 
         this.suggestionsActive = true;
         this.suggestionLines = suggestions.length;
 
-        // Move cursor back to input line
-        process.stdout.write(`\u001b[${suggestions.length + 1}A`); // Move up by number of suggestion lines + 1
+        process.stdout.write(`[${suggestions.length + 1}A`);
     }
 
     clearEmojiSuggestions() {
@@ -261,20 +272,17 @@ class Display {
             return;
         }
 
-        // Save current cursor position
-        process.stdout.write('\u001b[s');
+        process.stdout.write('[s');
 
-        // Move to start of suggestions and clear them
-        process.stdout.write('\n'); // Go to next line (where suggestions start)
+        process.stdout.write('\n');
         for (let i = 0; i < this.suggestionLines; i++) {
-            process.stdout.write('\u001b[2K'); // Clear entire line
+            process.stdout.write('[2K');
             if (i < this.suggestionLines - 1) {
-                process.stdout.write('\u001b[1B'); // Move down one line
+                process.stdout.write('[1B');
             }
         }
 
-        // Move back to input line
-        process.stdout.write(`\u001b[${this.suggestionLines}A`); // Move up by number of suggestion lines
+        process.stdout.write(`[${this.suggestionLines}A`);
 
         this.suggestionsActive = false;
         this.suggestionLines = 0;
@@ -285,28 +293,25 @@ class Display {
             return;
         }
 
-        // Move to suggestion area and redraw
         process.stdout.write('\n');
-        
+
         suggestions.forEach((suggestion, index) => {
             const isSelected = index === selectedIndex;
             const prefix = isSelected ? chalk.bgBlue.white(' ► ') : '   ';
             const emoji = chalk.yellow(suggestion.emoji);
             const shortcut = chalk.gray(suggestion.shortcut);
             const description = chalk.dim(suggestion.description);
-            
-            // Clear line and redraw
-            process.stdout.write('\u001b[2K'); // Clear entire line
-            process.stdout.write('\u001b[1G'); // Move to beginning of line
+
+            process.stdout.write('[2K');
+            process.stdout.write('[1G');
             process.stdout.write(prefix + emoji + ' ' + shortcut + ' ' + description);
-            
+
             if (index < suggestions.length - 1) {
                 process.stdout.write('\n');
             }
         });
 
-        // Move cursor back to input line
-        process.stdout.write(`\u001b[${suggestions.length}A`); // Move up by number of suggestion lines
+        process.stdout.write(`[${suggestions.length}A`);
     }
 }
 
