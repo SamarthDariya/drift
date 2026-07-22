@@ -56,6 +56,30 @@ drift --incognito
 drift -ic
 ```
 
+**Disguise styles** — pick how the screen looks with `--mode=`:
+
+```bash
+drift -ic --mode=htop    # process monitor (default)
+drift -ic --mode=syslog  # plain syslog lines
+drift -ic --mode=json    # structured JSON logs
+```
+
+**Set a default mode** so you don't have to pass `--mode=` every time:
+
+```bash
+drift --set-mode=json    # saved to ~/.config/drift/config.json
+drift -ic                # now uses json
+drift -ic --mode=htop    # a --mode= flag still overrides the saved default
+```
+
+Precedence: `--mode=` flag → saved default → `htop`.
+
+In `json` mode every line is a JSON log object
+(`{"timestamp","level","author","log"}`). A background stream of decoy
+`info`/`debug`/`warn` logs keeps the screen busy; your incoming chat messages
+arrive at `level: "error"` fenced with full-width `===` bars so you can spot
+them at a glance while a passerby just sees a noisy service log.
+
 **Entry flow:**
 - `host:` — room code to join (leave blank to create a new room)
 - `user:` — your nickname

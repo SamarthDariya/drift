@@ -12,11 +12,28 @@ const InputHandler = require('./modules/input-handler');
 const Emoji = require('./modules/emoji');
 const VersionChecker = require('./modules/version-checker');
 const SnakeClient = require('./modules/snake-client');
-const { getMode } = require('./modules/incognito-modes');
+const { getMode, modes } = require('./modules/incognito-modes');
+const config = require('./modules/config');
+
+// `drift --set-mode=<mode>` — persist the default incognito mode, then exit.
+const setModeArg = process.argv.find(a => a.startsWith('--set-mode='));
+if (setModeArg) {
+    const mode = setModeArg.split('=')[1];
+    const available = Object.keys(modes);
+    if (!available.includes(mode)) {
+        console.error(`unknown mode: ${mode || '(empty)'}. available: ${available.join(', ')}`);
+        process.exit(1);
+    }
+    const file = config.setDefaultMode(mode);
+    console.log(`saved: default incognito mode = ${mode}`);
+    console.log(`(${file})`);
+    process.exit(0);
+}
 
 const incognitoMode = process.argv.includes('--incognito') || process.argv.includes('-ic');
 const modeArg = process.argv.find(a => a.startsWith('--mode='));
-const modeName = modeArg ? modeArg.split('=')[1] : 'htop';
+// Precedence: --mode= flag > saved config default > htop.
+const modeName = modeArg ? modeArg.split('=')[1] : (config.getDefaultMode() || 'htop');
 
 class ChatCLI {
     constructor() {
@@ -246,6 +263,11 @@ class ChatCLI {
         if (this.display.incognito) {
             process.stdout.write('\x1Bc');
             this.display.drawHeader();
+            // The screen clear above wipes the room-code line printed on
+            // room_created, so re-emit it as a boot line that persists.
+            if (this.chatClient.roomCode) {
+                console.log(this.display.boot(`room=${this.chatClient.roomCode} listening`));
+            }
         }
         this.inputHandler.setupInputBox();
         if (this.display.incognito) this.display.startSeeder();
