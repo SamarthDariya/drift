@@ -62,6 +62,7 @@ drift -ic
 drift -ic --mode=htop    # process monitor (default)
 drift -ic --mode=syslog  # plain syslog lines
 drift -ic --mode=json    # structured JSON logs
+drift -ic --mode=ci      # CI/CD pipeline (green ✓ steps; messages as ✗ failures)
 ```
 
 **Set a default mode** so you don't have to pass `--mode=` every time:
