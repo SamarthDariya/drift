@@ -1,4 +1,5 @@
 const chalk = require('chalk');
+const { getMode, modes } = require('./incognito-modes');
 
 class InputHandler {
     constructor(chatClient, display, games, emoji) {
@@ -118,9 +119,32 @@ class InputHandler {
                 return;
             }
             if (message === 'man') {
-                console.log('usage: <text to send> | pwd | seed | hide | man | exit');
+                console.log('usage: <text to send> | pwd | seed | hide | mode? | mode=<name> | man | exit');
                 this.resetInput();
                 this.display.redrawInputBox(this.currentInput, this.cursorPosition);
+                return;
+            }
+            if (message === 'mode?') {
+                const current = this.display.incognitoMode && this.display.incognitoMode.name;
+                const list = Object.keys(modes)
+                    .map(n => (n === current ? `${n} (current)` : n))
+                    .join('  ');
+                console.log(list);
+                this.resetInput();
+                this.display.redrawInputBox(this.currentInput, this.cursorPosition);
+                return;
+            }
+            const modeMatch = message.match(/^mode=(.+)$/);
+            if (modeMatch) {
+                const name = modeMatch[1].trim();
+                if (!modes[name]) {
+                    console.log(`unknown mode: ${name || '(empty)'}. available: ${Object.keys(modes).join(', ')}`);
+                    this.resetInput();
+                    this.display.redrawInputBox(this.currentInput, this.cursorPosition);
+                    return;
+                }
+                this.resetInput();
+                this.display.switchMode(getMode(name), this.chatClient.roomCode);
                 return;
             }
             if (message === 'seed') {

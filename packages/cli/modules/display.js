@@ -14,9 +14,22 @@ class Display {
         this._seedTimer = null;
     }
 
-    _pushTimeline(kind, line) {
-        this._timeline.push({ kind, line });
+    _pushTimeline(entry) {
+        this._timeline.push(entry);
         if (this._timeline.length > 200) this._timeline.shift();
+    }
+
+    // Render a stored event through the CURRENT mode. Real events (message /
+    // system) carry raw data so they can be re-skinned on a mode switch; seed
+    // noise is randomly generated and not reproducible, so it keeps the string
+    // it was first rendered with.
+    _renderEntry(entry) {
+        const mode = this.incognitoMode;
+        switch (entry.kind) {
+            case 'message': return mode.formatMessage(entry.nickname, entry.text, entry.timestamp);
+            case 'system':  return mode.formatSystem(entry.text);
+            default:        return entry.line; // seed
+        }
     }
 
     drawHeader() {
@@ -30,7 +43,21 @@ class Display {
         process.stdout.write('\x1Bc');
         this.drawHeader();
         const filter = this.hideMessages ? e => e.kind === 'seed' : () => true;
-        this._timeline.filter(filter).forEach(e => console.log(e.line));
+        this._timeline.filter(filter).forEach(e => console.log(this._renderEntry(e)));
+        if (this.redrawCallback) this.redrawCallback();
+    }
+
+    // Live-switch the active disguise. Real events (messages, join/leave) are
+    // re-rendered in the new mode so the conversation carries over; decoy seed
+    // noise is dropped (not reproducible) and the seeder refills it fresh.
+    switchMode(modeObj, roomCode) {
+        this.incognitoMode = modeObj;
+        this.hideMessages = false;
+        this._timeline = this._timeline.filter(e => e.kind !== 'seed');
+        process.stdout.write('\x1Bc');
+        this.drawHeader();
+        if (roomCode) console.log(this.boot(`room=${roomCode} listening`));
+        this._timeline.forEach(e => console.log(this._renderEntry(e)));
         if (this.redrawCallback) this.redrawCallback();
     }
 
@@ -66,7 +93,7 @@ class Display {
         if (this.inputBoxActive) this.clearInputBox();
 
         const line = this.incognitoMode.seedLine();
-        this._pushTimeline('seed', line);
+        this._pushTimeline({ kind: 'seed', line });
         console.log(line);
 
         if (wasInputActive && this.redrawCallback) this.redrawCallback();
@@ -110,12 +137,17 @@ class Display {
 
     displayMessage(message, currentNickname) {
         if (this.incognito && this.incognitoMode) {
-            const line = this.incognitoMode.formatMessage(message.nickname, message.message, message.timestamp);
-            this._pushTimeline('real', line);
+            const entry = {
+                kind: 'message',
+                nickname: message.nickname,
+                text: message.message,
+                timestamp: message.timestamp
+            };
+            this._pushTimeline(entry);
             if (this.hideMessages) return;
             const wasInputActive = this.inputBoxActive;
             if (this.inputBoxActive) this.clearInputBox();
-            console.log(line);
+            console.log(this._renderEntry(entry));
             if (wasInputActive && this.redrawCallback) this.redrawCallback();
             return;
         }
@@ -145,13 +177,13 @@ class Display {
 
     displaySystemMessage(text) {
         if (this.incognito && this.incognitoMode) {
-            const line = this.incognitoMode.formatSystem(text);
-            this._pushTimeline('real', line);
+            const entry = { kind: 'system', text };
+            this._pushTimeline(entry);
             if (this.hideMessages) return;
             const wasInputActive = this.inputBoxActive;
             if (this.inputBoxActive) this.clearInputBox();
             if (this.suggestionsActive) this.clearEmojiSuggestions();
-            console.log(line);
+            console.log(this._renderEntry(entry));
             if (wasInputActive && this.redrawCallback) this.redrawCallback();
             return;
         }
