@@ -91,6 +91,10 @@ them at a glance while a passerby just sees a noisy service log.
 |---------|--------|
 | `exit` | Leave the room |
 | `pwd` | Show room code as `/rooms/ABC123` |
+| `seed` | Toggle the background decoy-log stream on/off |
+| `hide` | Toggle hiding real messages (show only decoy noise) |
+| `mode?` | List available disguises (current one marked) |
+| `mode=<name>` | Switch disguise live, e.g. `mode=htop` — re-renders the conversation so far in the new style (decoy noise is dropped and refills) |
 | `man` | Show usage help |
 
 Messages render as fake timestamped log lines. Games, emoji suggestions, and slash commands are disabled.
