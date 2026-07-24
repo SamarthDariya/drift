@@ -3,8 +3,9 @@ const syslog = require('./syslog');
 const json = require('./json');
 const ci = require('./ci');
 const claude = require('./claude');
+const build = require('./build');
 
-const modes = { htop, syslog, json, ci, claude };
+const modes = { htop, syslog, json, ci, build, claude };
 
 function getMode(name) {
     return modes[name] || modes.htop;

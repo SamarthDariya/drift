@@ -64,6 +64,7 @@ drift -ic --mode=syslog  # plain syslog lines
 drift -ic --mode=json    # structured JSON logs
 drift -ic --mode=ci      # CI/CD pipeline (green ✓ steps; messages as ✗ failures)
 drift -ic --mode=claude  # Claude Code agent (tool-call stream; messages as Update() code edits)
+drift -ic --mode=build   # Vite dev server (HMR stream; messages as build errors)
 ```
 
 **Set a default mode** so you don't have to pass `--mode=` every time:
